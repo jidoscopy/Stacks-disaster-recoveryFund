@@ -87,3 +87,68 @@
     )
   )
 )
+
+
+(define-public (set-admin (new-admin principal))
+  (let ((current-admin (var-get admin)))
+    (begin
+      (asserts! (is-eq tx-sender current-admin) ERR_UNAUTHORIZED)
+      (asserts! (not (is-eq new-admin current-admin)) (err u6)) ;; New error for unchanged admin
+      (var-set admin new-admin)
+      (ok new-admin)
+    )
+  )
+)
+
+(define-public (set-donation-limits (new-min uint) (new-max uint))
+  (if (and (is-eq tx-sender (var-get admin)) (< new-min new-max))
+    (begin
+      (var-set min-donation new-min)
+      (var-set max-donation new-max)
+      (print {event: "donation-limits-updated", min: new-min, max: new-max})
+      (ok true)
+    )
+    (err u104) ;; Error: Unauthorized or invalid limits
+  )
+)
+
+(define-public (set-paused (new-paused-state bool))
+  (let ((current-paused-state (var-get paused)))
+    (begin
+      (asserts! (is-eq tx-sender (var-get admin)) ERR_UNAUTHORIZED)
+      (asserts! (not (is-eq new-paused-state current-paused-state)) ERR_UNCHANGED_STATE)
+      (var-set paused new-paused-state)
+      (print {event: "contract-pause-changed", paused: new-paused-state})
+      (ok new-paused-state)
+    )
+  )
+)
+
+(define-public (update-recipient-allocation (recipient principal) (new-allocation uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get admin)) ERR_UNAUTHORIZED)
+    (asserts! (> new-allocation u0) ERR_INVALID_AMOUNT)
+    (asserts! (is-some (map-get? recipients recipient)) ERR_RECIPIENT_NOT_FOUND)
+    (ok (map-set recipients recipient new-allocation))
+  )
+)
+
+(define-public (remove-recipient (recipient principal))
+  (begin
+    (asserts! (is-eq tx-sender (var-get admin)) ERR_UNAUTHORIZED)
+    (asserts! (is-some (map-get? recipients recipient)) ERR_RECIPIENT_NOT_FOUND)
+    (map-delete recipients recipient)
+    (ok true)
+  )
+)
+
+(define-public (confirm-remove-recipient (recipient principal) (confirm bool))
+  (begin
+    (asserts! (is-eq tx-sender (var-get admin)) ERR_UNAUTHORIZED)
+    (asserts! confirm ERR_NOT_CONFIRMED)
+    (asserts! (is-some (map-get? recipients recipient)) ERR_RECIPIENT_NOT_FOUND)
+    (map-delete recipients recipient)
+    (print {event: "recipient-removed", recipient: recipient})
+    (ok true)
+  )
+)
