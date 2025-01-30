@@ -152,3 +152,63 @@
     (ok true)
   )
 )
+
+
+(define-public (request-refund (amount uint))
+  (let ((donation (get-donation tx-sender))
+        (current-time (unwrap-panic (get-stacks-block-info? time u0))))
+    (if (and (<= amount donation) 
+             (>= (- current-time (unwrap-panic (get-stacks-block-info? time u0))) withdrawal-cooldown)) ;; Refund within 24 hours
+      (begin
+        (map-set donations tx-sender (- donation amount))
+        (var-set total-funds (- (var-get total-funds) amount))
+        (as-contract (stx-transfer? amount tx-sender 'ST000000000000000000002AMW42H))
+      )
+      (err u110) ;; Error: Refund period expired or invalid amount
+    )
+  )
+)
+
+(define-public (emergency-shutdown)
+  (if (is-eq tx-sender (var-get admin))
+    (begin
+      (var-set paused true)
+      (print {event: "emergency-shutdown", admin: tx-sender})
+      (ok true)
+    )
+    (err u105) ;; Error: Unauthorized
+  )
+)
+
+(define-public (log-audit (action-type (string-ascii 32)) (actor principal))
+  (let ((current-time (unwrap-panic (get-stacks-block-info? time u0))))
+    (ok true)
+  )
+)
+
+
+(define-read-only (get-donation (user principal))
+  (default-to u0 (map-get? donations user))
+)
+
+(define-read-only (get-total-funds)
+  (ok (var-get total-funds))
+)
+
+(define-read-only (is-paused)
+  (ok (var-get paused))
+)
+
+(define-read-only (get-recipient-allocation (recipient principal))
+  (ok (default-to u0 (map-get? recipients recipient)))
+)
+
+(define-read-only (get-admin)
+  (ok (var-get admin))
+)
+
+(define-read-only (get-user-history (user principal))
+  ;; Return donation and withdrawal records for a user
+  (ok (tuple (donations (map-get? donations user)) (withdrawals (map-get? last-withdrawal user))))
+)
+
